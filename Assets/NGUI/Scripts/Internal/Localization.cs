@@ -1,0 +1,189 @@
+﻿//----------------------------------------------
+//            NGUI: Next-Gen UI kit
+// Copyright © 2011-2012 Tasharen Entertainment
+//----------------------------------------------
+//#define DONT_USE_LOCALIZATION
+
+using UnityEngine;
+using System.Collections.Generic;
+
+/// <summary>
+/// Localization manager is able to parse localization information from text assets.
+/// Although a singleton, you will generally not access this class as such. Instead
+/// you should implement "void Localize (Localization loc)" functions in your classes.
+/// Take a look at UILocalize to see how it's used.
+/// </summary>
+
+[AddComponentMenu("NGUI/Internal/Localization")]
+public class Localization : MonoBehaviour
+{
+	static Localization mInst;
+
+	/// <summary>
+	/// The instance of the localization class. Will create it if one isn't already around.
+	/// </summary>
+
+	static public Localization instance
+	{
+		get
+		{
+			if (mInst == null)
+			{
+				mInst = Object.FindObjectOfType(typeof(Localization)) as Localization;
+
+				if (mInst == null)
+				{
+					GameObject go = new GameObject("_Localization");
+					DontDestroyOnLoad(go);
+					mInst = go.AddComponent<Localization>();
+				}
+			}
+			return mInst;
+		}
+	}
+
+	/// <summary>
+	/// Language the localization manager will start with.
+	/// </summary>
+
+	public string startingLanguage;
+
+	/// <summary>
+	/// Available list of languages.
+	/// </summary>
+
+	public TextAsset[] languages;
+
+	protected Dictionary<string, string> mDictionary = new Dictionary<string, string>();
+	protected string mLanguage;
+
+	/// <summary>
+	/// Name of the currently active language.
+	/// </summary>
+
+	public virtual string currentLanguage
+	{
+		get
+		{
+			if (string.IsNullOrEmpty(mLanguage))
+			{
+				currentLanguage = PlayerPrefs.GetString("Language");
+
+				if (string.IsNullOrEmpty(mLanguage))
+				{
+					currentLanguage = startingLanguage;
+
+					if (string.IsNullOrEmpty(mLanguage) && (languages != null && languages.Length > 0))
+					{
+						currentLanguage = languages[0].name;
+					}
+				}
+			}
+			return mLanguage;
+		}
+		set
+		{
+			if (mLanguage != value)
+			{
+				startingLanguage = value;
+
+				if (!string.IsNullOrEmpty(value))
+				{
+					// Check the referenced assets first
+					if (languages != null)
+					{
+						for (int i = 0, imax = languages.Length; i < imax; ++i)
+						{
+							TextAsset asset = languages[i];
+
+							if (asset != null && asset.name == value)
+							{
+								Load(asset);
+								return;
+							}
+						}
+					}
+
+					// Not a referenced asset -- try to load it dynamically
+					TextAsset txt = Resources.Load(value, typeof(TextAsset)) as TextAsset;
+
+					if (txt != null)
+					{
+						Load(txt);
+						return;
+					}
+				}
+
+				// Either the language is null, or it wasn't found
+				mDictionary.Clear();
+				PlayerPrefs.DeleteKey("Language");
+			}
+		}
+	}
+
+	/// <summary>
+	/// Determine the starting language.
+	/// </summary>
+
+	void Awake () { 
+		if (mInst == null) { 
+			mInst = this; 
+			DontDestroyOnLoad(gameObject); 
+		} else 
+			Destroy(gameObject); 
+	}
+
+	/// <summary>
+	/// Start with the specified starting language.
+	/// </summary>
+
+	void Start () { 
+		if (!string.IsNullOrEmpty(startingLanguage)) 
+			currentLanguage = startingLanguage; 
+	}
+
+	/// <summary>
+	/// Oddly enough... sometimes if there is no OnEnable function in Localization, it can get the Awake call after UILocalize's OnEnable.
+	/// </summary>
+
+	void OnEnable () { 
+		if (mInst == null) 
+			mInst = this; 
+	}
+
+	/// <summary>
+	/// Remove the instance reference.
+	/// </summary>
+
+	void OnDestroy () { if (mInst == this) mInst = null; }
+
+	/// <summary>
+	/// Load the specified asset and activate the localization.
+	/// </summary>
+
+	void Load (TextAsset asset) {
+		mLanguage = asset.name;
+		PlayerPrefs.SetString("Language", mLanguage);
+		ByteReader reader = new ByteReader(asset);
+		mDictionary = reader.ReadDictionary();
+		UIRoot.Broadcast("OnLocalize", this);
+	}
+
+	/// <summary>
+	/// Localize the specified value.
+	/// </summary>
+
+	public virtual string Get (string key) {
+		string val;
+		bool val1 = mDictionary.TryGetValue(key, out val);
+	//	Debug.Log("TTTTTTTTTTTTTTTRRRRRRRRRRRRRYYYYYYYYYYYYYY "+mDictionary.Count);
+		
+		
+//		foreach (KeyValuePair<string,string>  kvp in  mDictionary)
+//{
+//     Debug.Log(kvp.Key +" "+ kvp.Value);
+//}
+		
+		return (mDictionary.TryGetValue(key, out val)) ? val : key;
+	}
+}
